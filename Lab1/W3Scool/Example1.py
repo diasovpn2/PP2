@@ -1,3 +1,1 @@
-def hello():
-    print("hello world")
-    #hello 22
+print("HELLO WORLD")
