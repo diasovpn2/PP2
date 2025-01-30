@@ -1,4 +1,4 @@
-def un():
-    x=int(input())   
+def un(x):   
     print(x*28.3495231)
-un()
+x=7
+un(x)
