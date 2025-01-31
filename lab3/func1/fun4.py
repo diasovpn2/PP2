@@ -1,12 +1,16 @@
-list=[1,2,3,4,5,6]
+lis = [1, 2, 3, 4, 5, 6]
+
 def num():
-    u=0
-    for x in range(list[u]):
-        u+1
-        y=x**0.5
-        for i in range(2,int(y)+1):
-            if x%i==0:
-                print("не простое число")
-            else: 
-                print("простое число")
+    for x in lis:
+        if x < 2:
+            print(x, "— не простое число")
+            continue
+        count = 0
+        for i in range(1, x + 1):
+            if x % i == 0:
+                count += 1
+        if count == 2:
+            print(x, "— простое число")
+        else:
+            print(x, "— не простое число")
 num()
