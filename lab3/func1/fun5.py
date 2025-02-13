@@ -1,4 +1,6 @@
+def s():
 x=input()
+d=[]
 for i in range(4):
     for j in range(4):
         if i== j:
@@ -9,4 +11,5 @@ for i in range(4):
             for w in range(4):
                 if w==q or w==i or w==j:
                     continue
-                print(x[i]+x[j]+x[q]+x[w])
+                 
+print(s())

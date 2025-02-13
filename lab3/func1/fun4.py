@@ -1,5 +1,4 @@
 lis = [1, 2, 3, 4, 5, 6]
-
 def num():
     for x in lis:
         if x < 2:
