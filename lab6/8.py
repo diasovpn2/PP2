@@ -1,16 +1,13 @@
 import os
 
-try:
-    path = input("Введите путь: ").strip()
-    
-    if not os.path.exists(path):
-        print("Путь не существует.")
-    else:
-        print("Путь существует.")
-        print("Читаемый:", os.access(path, os.R_OK))
-        print("Записываемый:", os.access(path, os.W_OK))
-        print("Исполняемый:", os.access(path, os.X_OK))
-        print("Имя файла:", os.path.basename(path))
-        print("Директория:", os.path.dirname(path))
-except Exception as e:
-    print("Ошибка:", e)
+
+def existance(path):
+    return os.path.exists(path)
+
+x = existance("qeinw0g")
+
+if x == True:
+    print(f"pos: {os.path.dirname(x)} \n")
+    print(f"port: {os.path.basename(x)}")
+else:
+    print("does not exist")
