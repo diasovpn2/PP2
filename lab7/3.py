@@ -1,75 +1,45 @@
 import pygame
-import sys
-from pygame.locals import *
-import random
+
 
 pygame.init()
-FPS = 60
-FramePerSec = pygame.time.Clock()
 
-W = (255, 255, 255)
-B = (0, 0, 0)
-R = (255, 0, 0)
-G = (0, 255, 0)
+BACKGROUND_COLOR = (255, 255, 255) 
+STEP = 20  
 
-widht = 400
-hight = 600
-
-DISPLAYSURF = pygame.display.set_mode((widht, hight))
-DISPLAYSURF.fill(W)
-pygame.display.set_caption("Game")
-
-class Enemy(pygame.sprite.Sprite):
-    def __init__(self):
-        super().__init__()
-        self.image = pygame.image.load("Enemy.png")
-        self.rect = self.image.get_rect()
-        self.rect.center = (random.randint(40, widht - 40), 0)
-
-    def move(self):
-        self.rect.move_ip(0, 10)
-        if self.rect.bottom > 600:
-            self.rect.top = 0
-            self.rect.center = (random.randint(30, 370), 0)
-
-    def draw(self, surface):
-        surface.blit(self.image, self.rect)
+ball_x = 500 // 2
+ball_y = 500 // 2
 
 
-class Player(pygame.sprite.Sprite):
-    def __init__(self):
-        super().__init__()
-        self.image = pygame.image.load("Player.png.png")
-        self.rect = self.image.get_rect()
-        self.rect.center = (160, 520)
-
-    def update(self):
-        pressed_keys = pygame.key.get_pressed()
-
-        if self.rect.left > 0 and pressed_keys[K_LEFT]:
-            self.rect.move_ip(-5, 0)
-        if self.rect.right < widht and pressed_keys[K_RIGHT]:
-            self.rect.move_ip(5, 0)
-
-    def draw(self, surface):
-        surface.blit(self.image, self.rect)
 
 
-P1 = Player()
-E1 = Enemy()
+screen = pygame.display.set_mode((500, 500))
+pygame.display.set_caption("Ball")
 
-while True:
+running = True
+while running:
+    pygame.time.delay(50) 
+    
     for event in pygame.event.get():
-        if event.type == QUIT:
-            pygame.quit()
-            sys.exit()
-
-    P1.update()
-    E1.move()
-
-    DISPLAYSURF.fill(W)
-    P1.draw(DISPLAYSURF)
-    E1.draw(DISPLAYSURF)
-
+        if event.type == pygame.QUIT:
+            running = False
+    
+ 
+    keys = pygame.key.get_pressed()
+    
+   
+    if keys[pygame.K_LEFT] and ball_x - 25 - STEP >= 0:
+        ball_x -= STEP
+    if keys[pygame.K_RIGHT] and ball_x + 25 + STEP <= 500:
+        ball_x += STEP
+    if keys[pygame.K_UP] and ball_y - 25 - STEP >= 0:
+        ball_y -= STEP
+    if keys[pygame.K_DOWN] and ball_y + 25 + STEP <= 500:
+        ball_y += STEP
+    
+  
+    screen.fill((255, 255, 255))
+    pygame.draw.circle(screen, ((255, 0, 0)), (ball_x, ball_y), 25)
     pygame.display.update()
-    FramePerSec.tick(FPS)
+
+
+pygame.quit()
