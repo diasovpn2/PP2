@@ -1,107 +1,130 @@
-import psycopg2
+from db import connect
+import csv
 
-def connect():
-    return psycopg2.connect(
-        host="localhost",
-        database="postgres",
-        user="postgres",
-        password="Qazmlp12"
-    )
+conn = connect()
+if not conn:
+    exit()
 
-# Функция для выполнения SQL-скрипта
-def ssql_script(script):
-    conn = None
+cur = conn.cursor()
+
+def create_table():
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS phonebook (
+            id SERIAL PRIMARY KEY,
+            first_name VARCHAR(50) NOT NULL,
+            phone VARCHAR(20) NOT NULL
+        )
+    """)
+    conn.commit()
+
+def insert_from_csv():
+    filename = input("Path to CSV: ")
     try:
-        conn = connect()
-        cursor = conn.cursor()
-        cursor.execute(script)
+        with open(filename, newline='', encoding='utf-8-sig') as f:
+            reader = csv.reader(f)
+            next(reader)
+            for row in reader:
+                cur.execute("INSERT INTO phonebook (first_name, phone) VALUES (%s, %s)", (row[0], row[1]))
         conn.commit()
-        print("SQL скрипт выполнен успешно.")
-        cursor.close()
-    except (Exception, psycopg2.DatabaseError) as error:
-        print(f"Ошибка при выполнении SQL: {error}")
-    finally:
-        if conn is not None:
-            conn.close()
+        print("Successful CSV import.")
+    except UnicodeDecodeError:
+        print("Ошибка декодирования. Попробуй другую кодировку, например 'cp1251'.")
+    except Exception as e:
+        print("Ошибка при чтении CSV:", e)
 
-# Функция для получения всех данных из таблицы phonebook
-def get_all_records():
-    conn = None
-    try:
-        conn = connect()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM phonebook;")
-        records = cursor.fetchall()
-        print("Текущие записи в таблице phonebook:")
-        for record in records:
-            print(record)
-        cursor.close()
-    except (Exception, psycopg2.DatabaseError) as error:
-        print(f"Ошибка при извлечении данных: {error}")
-    finally:
-        if conn is not None:
-            conn.close()
+def insert_from_input():
+    name = input("Insert name: ")
+    phone = input("Insert phone number: ")
+    cur.execute("CALL insert_or_update_user(%s, %s)", (name, phone))
+    conn.commit()
+    print("User added or updated via procedure.")
 
-# SQL-скрипт для создания таблицы и процедур
-sql_script = """
-CREATE TABLE IF NOT EXISTS phonebook (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    surname TEXT,
-    phone TEXT NOT NULL
-);
+def update_user():
+    old_name = input("Insert name to update: ")
+    new_name = input("New name (press Enter to skip): ")
+    new_phone = input("New phone number (press Enter to skip): ")
 
--- Функция для поиска по шаблону
-CREATE OR REPLACE FUNCTION search_phonebook(pattern TEXT)
-RETURNS TABLE(id INT, name TEXT, surname TEXT, phone TEXT) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT id, name, surname, phone
-    FROM phonebook
-    WHERE name LIKE '%' || pattern || '%'
-       OR surname LIKE '%' || pattern || '%'
-       OR phone LIKE '%' || pattern || '%';
-END;
-$$ LANGUAGE plpgsql;
+    if new_name:
+        cur.execute("UPDATE phonebook SET first_name = %s WHERE first_name = %s", (new_name, old_name))
+    if new_phone:
+        cur.execute("UPDATE phonebook SET phone = %s WHERE first_name = %s", (new_phone, new_name or old_name))
+    conn.commit()
+    print("Data updated.")
 
--- Процедура для вставки или обновления пользователя
-CREATE OR REPLACE PROCEDURE insert_or_update_user(new_name TEXT, new_phone TEXT)
-LANGUAGE plpgsql AS $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM phonebook WHERE name = new_name) THEN
-        UPDATE phonebook
-        SET phone = new_phone
-        WHERE name = new_name;
-    ELSE
-        INSERT INTO phonebook (name, phone)
-        VALUES (new_name, new_phone);
-    END IF;
-END;
-$$;
+def query_data():
+    print("1. Show all\n2. Search by name\n3. Search by phone\n4. Pattern search")
+    choice = input("Choice: ")
 
--- Процедура для удаления данных по имени или телефону
-CREATE OR REPLACE PROCEDURE delete_user_by_username_or_phone(identifier TEXT)
-LANGUAGE plpgsql AS $$ 
-BEGIN
-    DELETE FROM phonebook
-    WHERE name = identifier;
+    if choice == '1':
+        cur.execute("SELECT * FROM phonebook")
+    elif choice == '2':
+        name = input("Insert name: ")
+        cur.execute("SELECT * FROM phonebook WHERE first_name = %s", (name,))
+    elif choice == '3':
+        phone = input("Insert phone number: ")
+        cur.execute("SELECT * FROM phonebook WHERE phone = %s", (phone,))
+    elif choice == '4':
+        pattern = input("Enter part of name or phone: ")
+        pattern = f"%{pattern}%"
+        cur.execute("""
+            SELECT * FROM phonebook
+            WHERE first_name ILIKE %s OR phone ILIKE %s
+        """, (pattern, pattern))
+    else:
+        print("Wrong choice")
+        return
 
-    IF NOT FOUND THEN
-        DELETE FROM phonebook
-        WHERE phone = identifier;
-    END IF;
-END;
-$$;
-"""
+    rows = cur.fetchall()
+    for row in rows:
+        print(row)
 
-# Выполнение SQL-скрипта
-ssql_script(sql_script)
+def delete_user():
+    print("Delete by:\n1. Name\n2. Phone")
+    choice = input("Choice: ")
 
-# Добавление/обновление данных
-insert_script = """
-CALL insert_or_update_user('John Doe', '1234567890');
-CALL insert_or_update_user('Jane Smith', '0987654321');
-"""
+    if choice == '1':
+        name = input("Insert name: ")
+        cur.execute("DELETE FROM phonebook WHERE first_name = %s", (name,))
+    elif choice == '2':
+        phone = input("Insert phone number: ")
+        cur.execute("DELETE FROM phonebook WHERE phone = %s", (phone,))
+    else:
+        print("Wrong choice")
+        return
+    conn.commit()
+    print("User deleted.")
 
-ssql_script(insert_script)
-get_all_records()
+def menu():
+    create_table()
+    while True:
+        print("\n=== PHONEBOOK ===")
+        print("1. Add from CSV")
+        print("2. Add manually (with procedure)")
+        print("3. Update user")
+        print("4. Search")
+        print("5. Delete user")
+        print("0. Exit")
+
+        choice = input("Choice: ")
+
+        if choice == '1':
+            insert_from_csv()
+        elif choice == '2':
+            insert_from_input()
+        elif choice == '3':
+            update_user()
+        elif choice == '4':
+            query_data()
+        elif choice == '5':
+            delete_user()
+        elif choice == '0':
+            break
+        else:
+            print("Wrong choice.")
+
+    cur.close()
+    conn.close()
+    print("Exiting program.")
+
+if __name__ == "__main__":
+    menu()

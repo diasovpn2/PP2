@@ -1,5 +1,5 @@
 import csv
-from lab10a.phone.db import connect
+from db import connect
 
 def insert_from_csv(file_path):
     conn = connect()

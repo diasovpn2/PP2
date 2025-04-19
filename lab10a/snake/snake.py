@@ -1,258 +1,218 @@
 import pygame
 import random
-import psycopg2
+import time
+from db import get_connection  # Импорт функции подключения к БД
 
 # Подключение к базе данных
-def connect():
-    return psycopg2.connect(
-        host="localhost",
-        database="postgres",
-        user="postgres",
-        password="Qazmlp12"
-    )
+conn = get_connection()
+cursor = conn.cursor()
 
-# Функция для создания таблиц
-def create_tables():
-    conn = connect()
-    cur = conn.cursor()
+# Создание таблиц
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS users (
+    username TEXT PRIMARY KEY
+)
+''')
 
-    # Таблица user
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS "user" (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE
-    )
-    """)
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS user_scores (
+    username TEXT REFERENCES users(username),
+    score INTEGER,
+    level INTEGER
+)
+''')
 
-    # Таблица user_score
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS user_score (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES "user"(id),
-        score INTEGER,
-        level INTEGER,
-        date_played TIMESTAMP DEFAULT current_timestamp
-    )
-    """)
+conn.commit()
 
+# Получение пользователя
+username = input("Enter your username: ")
+cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+user = cursor.fetchone()
+
+# Если пользователь новый — создать
+if not user:
+    cursor.execute("INSERT INTO users (username) VALUES (%s)", (username,))
     conn.commit()
-    cur.close()
-    conn.close()
-
-# Запрос имени пользователя и получение/создание пользователя в базе данных
-def get_user_id(username):
-    conn = connect()
-    cur = conn.cursor()
-
-    # Проверка, существует ли пользователь в базе данных
-    cur.execute("SELECT id FROM \"user\" WHERE username = %s", (username,))
-    user_result = cur.fetchone()
-
-    if user_result:
-        user_id = user_result[0]
+    score = 0
+    level = 1
+    print(f"New user created: {username}. Starting at level {level}")
+else:
+    # Получение последнего результата
+    cursor.execute("SELECT score, level FROM user_scores WHERE username = %s ORDER BY score DESC LIMIT 1", (username,))
+    data = cursor.fetchone()
+    if data:
+        score, level = data
+        print(f"Welcome back, {username}! Resuming from level {level}, score {score}")
     else:
-        # Если пользователя нет, создаем нового
-        cur.execute("INSERT INTO \"user\" (username) VALUES (%s) RETURNING id", (username,))
-        user_id = cur.fetchone()[0]
-        conn.commit()
-
-    cur.close()
-    conn.close()
-    return user_id
-
+        score = 0
+        level = 1
+        print(f"Welcome back, {username}! No previous score found.")
 
 # Инициализация Pygame
 pygame.init()
 
-# Настройки игры
-WIDTH = 600
-HEIGHT = 600
-CELL = 30
-FPS_START = 5.5
+# Размер экрана и цвета
+width, height = 800, 600
+black, white, gray = (0, 0, 0), (255, 255, 255), (128, 128, 128)
+green, red, blue = (0, 255, 0), (255, 0, 0), (0, 0, 255)
 
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-game_over = False 
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption("Snake Game with Levels and Timed Food")
 
-# Цвета
-colorWHITE = (255, 255, 255)
-colorGRAY = (200, 200, 200)
-colorBLACK = (0, 0, 0)
-colorRED = (255, 0, 0)
-colorGREEN = (0, 255, 0)
-colorYELLOW = (255, 255, 0)
+# Переменные
+fruit_eaten, done = False, False
+speed = max(50, 200 - (level * 20))
 
-# Отображение сетки
-def draw_grid_chess():
-    colors = [colorWHITE, colorGRAY]
-    for i in range(HEIGHT // CELL):
-        for j in range(WIDTH // CELL):
-            pygame.draw.rect(screen, colors[(i + j) % 2], (i * CELL, j * CELL, CELL, CELL))
+# Змейка
+head_square = [100, 100]
+squares = [[x, 100] for x in range(30, 101, 10)]
+direction, next_dir = "right", "right"
 
-# Класс точки (координаты)
-class Point:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
+# Типы еды
+food_types = [
+    {"color": green, "points": 10},
+    {"color": red, "points": 20},
+    {"color": blue, "points": 30}
+]
 
-    def __eq__(self, other):
-        return self.x == other.x and self.y == other.y
+# Стены по уровням
+walls = {
+    2: [[200, 200], [210, 200], [220, 200], [230, 200]],
+    3: [[400, 300], [410, 300], [420, 300], [430, 300]],
+}
 
-# Класс змеи
-class Snake:
-    def __init__(self):
-        self.body = [Point(10, 11), Point(10, 12), Point(10, 13)]
-        self.dx, self.dy = 0, -1  # Изначально движется вверх
+# Проверка на столкновение со стеной или границей
+def check_wall_collision(head):
+    if head[0] < 0 or head[0] >= width or head[1] < 0 or head[1] >= height:
+        return True
+    if level in walls:
+        if head in walls[level]:
+            return True
+    return False
 
-    def move(self):
-        # Создание новой головы
-        new_head = Point(self.body[0].x + self.dx, self.body[0].y + self.dy)
-        
-        # Проверка границ
-        if new_head.x < 0 or new_head.x >= WIDTH // CELL or new_head.y < 0 or new_head.y >= HEIGHT // CELL:
-            return True  # Игра завершена
+# Генерация новой еды
+def generate_food():
+    while True:
+        fr_x = random.randrange(1, width // 10) * 10
+        fr_y = random.randrange(1, height // 10) * 10
+        food = random.choice(food_types)
+        if [fr_x, fr_y] not in squares and (level not in walls or [fr_x, fr_y] not in walls[level]):
+            return {
+                "coord": [fr_x, fr_y],
+                "color": food["color"],
+                "points": food["points"],
+                "spawn_time": time.time()
+            }
 
-        # Проверка на столкновение с собой
-        if new_head in self.body:
-            return True  # Игра завершена
-        
-        # Перемещение тела змеи
-        self.body.insert(0, new_head)  # Добавление новой головы
-        self.body.pop()   # Удаление хвоста
-        return False
+fruit = generate_food()
+food_timer = 10  # время жизни еды в секундах
 
-    def draw(self):
-        pygame.draw.rect(screen, colorRED, (self.body[0].x * CELL, self.body[0].y * CELL, CELL, CELL))
-        for segment in self.body[1:]:
-            pygame.draw.rect(screen, colorYELLOW, (segment.x * CELL, segment.y * CELL, CELL, CELL))
+# Функция конца игры
+def game_over():
+    global done
+    cursor.execute(
+        "INSERT INTO user_scores (username, score, level) VALUES (%s, %s, %s)",
+        (username, score, level)
+    )
+    conn.commit()
 
-    def check_collision(self, food):
-        global score, FPS, lvl 
-        if self.body[0] == food.pos:  # Съесть еду
-            self.body.append(Point(self.body[-1].x, self.body[-1].y))  # Увеличить длину тела
-            food.move(self)
-            score += food.cost 
+    font = pygame.font.SysFont("times new roman", 45)
+    text = font.render(f"Game Over! Your score: {score}", True, gray)
+    screen.fill(black)
+    screen.blit(text, text.get_rect(center=(width // 2, height // 2)))
+    pygame.display.update()
+    pygame.time.delay(3000)
+    pygame.quit()
+    cursor.close()
+    conn.close()
+    exit()
 
-            if score % 5 == 0:
-                FPS += 0.5
-                lvl += 1
-
-# Класс еды
-class Food:
-    def __init__(self, disapper=True):
-        self.disapper = disapper
-        self.last_spawn_time = pygame.time.get_ticks()  # Запоминаем время последнего спауна
-        self.move(snake=None)
-
-    def move(self, snake):
-        while True:
-            self.x = random.randrange(0, WIDTH // CELL)  
-            self.y = random.randrange(0, HEIGHT // CELL)  
-            self.pos = Point(self.x, self.y)
-            self.cost = random.randrange(1, 4)
-
-            # Проверка, чтобы еда не спаунилась на теле змеи
-            if snake is None or self.pos not in snake.body:
-                if self.disapper:
-                    self.last_spawn_time = pygame.time.get_ticks()  # Обновляем таймер спауна
-                    break
-
-    def draw(self):
-        pygame.draw.rect(screen, colorGREEN, (self.pos.x * CELL, self.pos.y * CELL, CELL, CELL))
-
-
-# Настройки игры
-FPS = FPS_START
-score = 0
-lvl = 1
-clock = pygame.time.Clock()
-
-# Запрос имени пользователя и создание/получение пользователя в базе данных
-username = input("Enter your name: ")
-user_id = get_user_id(username)
-
-# Создание змеи и еды
-snake = Snake()
-food = Food()
-game_over = False
-
-running = True
-while running:
-    if not game_over:
-        if pygame.time.get_ticks() - food.last_spawn_time > 10000:
-            food.move(snake)
-        draw_grid_chess()
-        game_over = snake.move()
-        snake.check_collision(food)
-        snake.draw()
-        food.draw()
-
-        # Отображение счета
-        font_score = pygame.font.Font(None, 36)
-        text = font_score.render(f" Score: {score} ", True, (0, 0, 0))
-        font_score_rect = text.get_rect()
-        screen.blit(text, (WIDTH - font_score_rect.w, 10))
-
-        # Отображение уровня
-        font_speed = pygame.font.Font(None, 36)
-        text_speed = font_speed.render(f" Level: {lvl} ", True, (0, 0, 0))
-        font_speed_rect = text_speed.get_rect()
-        screen.blit(text_speed, (0, 10))
-
-    else:
-        # Экран "Game Over"
-        screen.fill('red')
-
-        font_GO = pygame.font.Font(None, 50)
-        text_gameOver = font_GO.render("Game Over!", True, (255, 255, 255))
-        text_rect = text_gameOver.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-        screen.blit(text_gameOver, text_rect)
-
-        font_restart = pygame.font.Font(None, 25)
-        text_restart = font_restart.render('Press "R" to Restart', True, (255, 255, 255))
-        text_restart_rect = text_restart.get_rect(center=(WIDTH // 2, HEIGHT - 40))
-        screen.blit(text_restart, text_restart_rect)
-
-    # Обработка событий
+# Основной игровой цикл
+while not done:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            running = False
+            done = True
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_p:  # P — пауза и сохранить
-                conn = connect()
-                cur = conn.cursor()
-                cur.execute("INSERT INTO user_score (user_id, score, level) VALUES (%s, %s, %s)",
-                            (user_id, score, lvl))
-                conn.commit()
-                cur.close()
-                conn.close()
-                print("The progress saved.")
+            if event.key == pygame.K_DOWN and direction != "up":
+                next_dir = "down"
+            if event.key == pygame.K_UP and direction != "down":
+                next_dir = "up"
+            if event.key == pygame.K_LEFT and direction != "right":
+                next_dir = "left"
+            if event.key == pygame.K_RIGHT and direction != "left":
+                next_dir = "right"
+            if event.key == pygame.K_p:
+                print("Game paused and saved. Press P to resume.")
+                paused = True
+                while paused:
+                    for e in pygame.event.get():
+                        if e.type == pygame.KEYDOWN and e.key == pygame.K_p:
+                            paused = False
 
-        elif event.type == pygame.KEYDOWN and game_over:
-            if event.key == pygame.K_r:  # Перезапуск игры
-                # Сброс настроек
-                FPS = FPS_START
-                score = 0
-                lvl = 1
-                game_over = False 
+    # Проверка на столкновение с собой
+    for square in squares[:-1]:
+        if head_square == square:
+            game_over()
+    if check_wall_collision(head_square):
+        game_over()
 
-                # Воссоздание змеи и еды
-                snake = Snake()
-                food = Food()  # Создание новой еды (сбрасывается last_spawn_time)
-            snake.body = [Point(10, 11), Point(10, 12), Point(10, 13)]
-            snake.dx, snake.dy = 0, -1
+    direction = next_dir
 
-        elif event.type == pygame.KEYDOWN and not game_over:
-            # Управление змеей с помощью стрелок или WASD
-            if event.key == pygame.K_RIGHT:
-                snake.dx = 1
-            elif event.key == pygame.K_LEFT:
-                snake.dx = -1
-            elif event.key == pygame.K_DOWN:
-                snake.dy = 1
-            elif event.key == pygame.K_UP:
-                snake.dy = -1
+    # Движение головы
+    if direction == "right":
+        head_square[0] += 10
+    elif direction == "left":
+        head_square[0] -= 10
+    elif direction == "up":
+        head_square[1] -= 10
+    elif direction == "down":
+        head_square[1] += 10
+
+    new_square = [head_square[0], head_square[1]]
+    squares.append(new_square)
+
+    # Проверка съедена ли еда
+    if head_square == fruit["coord"]:
+        fruit_eaten = True
+        score += fruit["points"]
+    else:
+        squares.pop(0)
+
+    # Таймер еды
+    if time.time() - fruit["spawn_time"] > food_timer:
+        fruit_eaten = True
+
+    # Новая еда
+    if fruit_eaten:
+        fruit = generate_food()
+        fruit_eaten = False
+
+    # Обновление уровня и скорости
+    level = score // 30 + 1
+    speed = max(50, 200 - (level * 20))
+
+    # Отрисовка
+    screen.fill(black)
+    font = pygame.font.SysFont("times new roman", 20)
+    score_surface = font.render(f"User: {username}  Score: {score}  Level: {level}", True, gray)
+    screen.blit(score_surface, (20, 20))
+
+    # Рисование стен
+    if level in walls:
+        for wall in walls[level]:
+            pygame.draw.rect(screen, gray, pygame.Rect(wall[0], wall[1], 10, 10))
+
+    # Рисование еды
+    pygame.draw.circle(screen, fruit["color"], (fruit["coord"][0] + 5, fruit["coord"][1] + 5), 5)
+
+    # Рисование змеи
+    for el in squares:
+        pygame.draw.rect(screen, white, pygame.Rect(el[0], el[1], 10, 10))
 
     pygame.display.flip()
-    clock.tick(FPS)
+    pygame.time.delay(speed)
 
+# Очистка при выходе
+cursor.close()
+conn.close()
 pygame.quit()

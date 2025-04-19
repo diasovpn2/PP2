@@ -8,11 +8,9 @@ def connect():
         password="Qazmlp12"
     )
 
-# Подключаемся к базе данных
 conn = connect()
 cur = conn.cursor()
 
-# Таблица user
 cur.execute("""
 CREATE TABLE IF NOT EXISTS "user" (
     id SERIAL PRIMARY KEY,
@@ -20,7 +18,6 @@ CREATE TABLE IF NOT EXISTS "user" (
 )
 """)
 
-# Таблица user_score
 cur.execute("""
 CREATE TABLE IF NOT EXISTS user_score (
     id SERIAL PRIMARY KEY,
@@ -31,7 +28,6 @@ CREATE TABLE IF NOT EXISTS user_score (
 )
 """)
 
-# Подтверждаем изменения и закрываем соединение
 conn.commit()
 cur.close()
 conn.close()

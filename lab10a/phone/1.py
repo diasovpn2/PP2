@@ -1,4 +1,4 @@
-from lab10a.phone.db import connect
+from db import connect
 
 conn = connect()
 cur = conn.cursor()
