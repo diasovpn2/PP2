@@ -1,10 +1,8 @@
 import psycopg2
-
-def get_connection():
+def connect():
     return psycopg2.connect(
-        dbname="users",
-        user="postgres",
-        password="Qazmlp12",
         host="localhost",
-        port="5432"
+        database="postgres",
+        user="postgres",
+        passward="Qazmlp12",
     )

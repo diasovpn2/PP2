@@ -1,10 +1,10 @@
 import pygame
 import random
 import time
-from db import get_connection  # Импорт функции подключения к БД
+from db import connect  # Импорт функции подключения к БД
 
 # Подключение к базе данных
-conn = get_connection()
+conn = connect()
 cursor = conn.cursor()
 
 # Создание таблиц
