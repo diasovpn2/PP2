@@ -4,5 +4,5 @@ def connect():
         host="localhost",
         database="postgres",
         user="postgres",
-        passward="Qazmlp12",
+        password="Qazmlp12",
     )

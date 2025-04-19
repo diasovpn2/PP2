@@ -8,13 +8,13 @@ conn = connect()
 cursor = conn.cursor()
 
 # Создание таблиц
-cursor.execute('''
+cursor.execute(''' 
 CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY
 )
 ''')
 
-cursor.execute('''
+cursor.execute(''' 
 CREATE TABLE IF NOT EXISTS user_scores (
     username TEXT REFERENCES users(username),
     score INTEGER,
@@ -54,7 +54,7 @@ pygame.init()
 # Размер экрана и цвета
 width, height = 800, 600
 black, white, gray = (0, 0, 0), (255, 255, 255), (128, 128, 128)
-green, red, blue = (0, 255, 0), (255, 0, 0), (0, 0, 255)
+red, blue = (255, 0, 0), (0, 0, 255)
 
 screen = pygame.display.set_mode((width, height))
 pygame.display.set_caption("Snake Game with Levels and Timed Food")
@@ -70,33 +70,36 @@ direction, next_dir = "right", "right"
 
 # Типы еды
 food_types = [
-    {"color": green, "points": 10},
     {"color": red, "points": 20},
     {"color": blue, "points": 30}
 ]
 
-# Стены по уровням
-walls = {
-    2: [[200, 200], [210, 200], [220, 200], [230, 200]],
-    3: [[400, 300], [410, 300], [420, 300], [430, 300]],
-}
+# Генерация статичных стен размером 2x2
+def generate_walls():
+    walls = []
+    wall_count = random.randint(5, 10)  # Количество стен на уровне
+    for _ in range(wall_count):
+        x = random.randrange(0, (width // 20) - 2) * 20  # Уменьшаем диапазон для правильного расположения
+        y = random.randrange(0, (height // 20) - 2) * 20
+        walls.append([x, y])
+    return walls
 
 # Проверка на столкновение со стеной или границей
-def check_wall_collision(head):
+def check_wall_collision(head, walls):
     if head[0] < 0 or head[0] >= width or head[1] < 0 or head[1] >= height:
         return True
-    if level in walls:
-        if head in walls[level]:
+    for wall in walls:
+        if (wall[0] <= head[0] < wall[0] + 40) and (wall[1] <= head[1] < wall[1] + 40):
             return True
     return False
 
 # Генерация новой еды
-def generate_food():
+def generate_food(walls):
     while True:
         fr_x = random.randrange(1, width // 10) * 10
         fr_y = random.randrange(1, height // 10) * 10
         food = random.choice(food_types)
-        if [fr_x, fr_y] not in squares and (level not in walls or [fr_x, fr_y] not in walls[level]):
+        if [fr_x, fr_y] not in squares and [fr_x, fr_y] not in walls:
             return {
                 "coord": [fr_x, fr_y],
                 "color": food["color"],
@@ -104,7 +107,7 @@ def generate_food():
                 "spawn_time": time.time()
             }
 
-fruit = generate_food()
+fruit = generate_food([])  # Стены пока передаем как пустой список
 food_timer = 10  # время жизни еды в секундах
 
 # Функция конца игры
@@ -126,6 +129,9 @@ def game_over():
     cursor.close()
     conn.close()
     exit()
+
+# Генерация стен один раз в начале игры
+walls = generate_walls()
 
 # Основной игровой цикл
 while not done:
@@ -153,7 +159,7 @@ while not done:
     for square in squares[:-1]:
         if head_square == square:
             game_over()
-    if check_wall_collision(head_square):
+    if check_wall_collision(head_square, walls):
         game_over()
 
     direction = next_dir
@@ -184,7 +190,7 @@ while not done:
 
     # Новая еда
     if fruit_eaten:
-        fruit = generate_food()
+        fruit = generate_food(walls)
         fruit_eaten = False
 
     # Обновление уровня и скорости
@@ -197,10 +203,9 @@ while not done:
     score_surface = font.render(f"User: {username}  Score: {score}  Level: {level}", True, gray)
     screen.blit(score_surface, (20, 20))
 
-    # Рисование стен
-    if level in walls:
-        for wall in walls[level]:
-            pygame.draw.rect(screen, gray, pygame.Rect(wall[0], wall[1], 10, 10))
+    # Рисование стен (статичные 2x2)
+    for wall in walls:
+        pygame.draw.rect(screen, gray, pygame.Rect(wall[0], wall[1], 40, 40))  # Размер 40x40 (2x2)
 
     # Рисование еды
     pygame.draw.circle(screen, fruit["color"], (fruit["coord"][0] + 5, fruit["coord"][1] + 5), 5)
