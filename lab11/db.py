@@ -1,9 +1,18 @@
 import psycopg2
 
+DB_CONFIG = {
+    'dbname': 'postgres',
+    'user': 'postgres',
+    'password': 'Qazmlp12',
+    'host': 'localhost',
+    'port': '5432',
+    'client_encoding': 'utf-8'  # Добавление кодировки
+}
+
 def connect():
-    return psycopg2.connect(
-        host="localhost",
-        database="postgres",
-        user="postgres",
-        password="Qazmlp12"
-    )
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        return conn
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        return None

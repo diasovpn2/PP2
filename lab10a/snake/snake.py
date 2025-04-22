@@ -203,10 +203,9 @@ while not done:
     score_surface = font.render(f"User: {username}  Score: {score}  Level: {level}", True, gray)
     screen.blit(score_surface, (20, 20))
 
-    # Рисование стен (статичные 2x2)
+   
     for wall in walls:
-        pygame.draw.rect(screen, gray, pygame.Rect(wall[0], wall[1], 40, 40))  # Размер 40x40 (2x2)
-
+        pygame.draw.rect(screen, gray, pygame.Rect(wall[0], wall[1], 40, 40))
     # Рисование еды
     pygame.draw.circle(screen, fruit["color"], (fruit["coord"][0] + 5, fruit["coord"][1] + 5), 5)
 
